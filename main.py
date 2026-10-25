@@ -127,6 +127,7 @@ async def ask_gemini(prompt):
             except errors.ServerError as e:
                 last_error = e
                 await asyncio.sleep(2 ** attempt)   # waits 1, 2, then 4 seconds
+                continue
             except errors.ClientError as e:
                 if e.code in (404, 429):
                     print(f"Skipping {model}: {e.code}")   
@@ -232,7 +233,7 @@ def home(request: Request):
         """
     else:
         body = """
-        <h1>YouTube Likes Roast</h1>
+        <h1>YouTube Roast</h1>
         <p>Log in with Google and get roasted based on your liked videos,
         subscriptions and playlists.</p>
         <a class="btn" href="/login">Login with Google</a>
