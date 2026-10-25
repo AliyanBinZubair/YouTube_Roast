@@ -3,7 +3,7 @@
 A web app that logs you in with Google, reads your YouTube liked videos, subscriptions and playlists, and asks Gemini to write a funny roast about your taste, with a "Brain Rot Score".
 
 **Live demo:** https://youtube-roast.onrender.com
-**Demo video:** C:\Users\Aliyan Bin Zubair\OneDrive\Desktop\YoutTube\Demo_video.mp4
+**Demo video:** https://youtu.be/kUN-5nSUloM
 
 > **Note:** The Google app is in testing mode, so only approved test users can log in. Watch the demo video to see it working.
 > The free host sleeps when idle, so the first load can take up to a minute.
