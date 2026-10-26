@@ -293,12 +293,12 @@ async def data(request: Request):
         angles = await ask_gemini(ANGLE_FINDER + DATA_NOTES + "\n\nDATA:\n" + data_text)
         roast_text = await ask_gemini(
             ROAST_WRITER + DATA_NOTES + "\n\nDATA:\n" + data_text + "\n\nANGLES FOUND:\n" + angles)
-    except errors.ServerError:
+    except errors.APIError:    # quota errors or gemini traffic errors, quota means limit of APIs 
         return HTMLResponse(PAGE.replace("__BODY__",
             "<h2>The AI is overloaded right now</h2>"
             "<p>This usually clears up in a minute. Try again.</p>"
             "<a class='btn' href='/'>Back</a>"))
         
     body = markdown.markdown(html.escape(roast_text))
-    body += '<p><a href="/logout">Log out</a></p>'
+    body += '<p><a class="btn" href="/">Back</a><a href="/logout">Log out</a></p>'
     return HTMLResponse(PAGE.replace("__BODY__", body))
