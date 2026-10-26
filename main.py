@@ -300,4 +300,5 @@ async def data(request: Request):
             "<a class='btn' href='/'>Back</a>"))
         
     body = markdown.markdown(html.escape(roast_text))
+    body += '<p><a href="/logout">Log out</a></p>'
     return HTMLResponse(PAGE.replace("__BODY__", body))
