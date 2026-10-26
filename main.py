@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware  # starlette downloads along fastapi
 from authlib.integrations.starlette_client import OAuth
+from authlib.integrations.base_client.errors import MismatchingStateError
 from google import genai
 from collections import Counter
 from google.genai import errors
@@ -170,6 +171,8 @@ async def fetch_all(client, url, params, access_token, max_items):
             raise TokenExpired()  # google token expired
         if r.status_code != 200:
             raise Exception(r.text)   # shows YouTube's error in your terminal
+        if r.status_code == 404 and "channelNOtFound" in r.text:
+            return []       # no channel means nothing to fetch, not a failure
 
         data = r.json()
         items += data.get("items", [])
@@ -237,6 +240,7 @@ def home(request: Request):
         <p>Log in with Google and get roasted based on your liked videos,
         subscriptions and playlists.</p>
         <a class="btn" href="/login">Login with Google</a>
+        <p>On Google's screen, tick the box that lets this app view your YouTube account, then press Continue.</p>
         <p class="small">This app only reads your YouTube data (it can't change anything),
         and it doesn't save any of it.</p>
         """
@@ -254,7 +258,18 @@ def logout(request: Request):
 
 @app.get("/callback")
 async def callback(request: Request):
-    token = await oauth.google.authorize_access_token(request)
+    try:
+        token = await oauth.google.authorize_access_token(request)
+    except MismatchingStateError :
+        return RedirectResponse("/")
+        
+    if "youtube.readonly" not in token.get("scope", ""):
+        request.session.clear()
+        return HTMLResponse(PAGE.replace("__BODY__",
+            "<h2>One more step</h2>"
+            "<p>On Google's screen, tick the box that lets this app view your YouTube account, then press Continue.</p>"
+            "<a class='btn' href='/login'>Try again</a>"))
+        
     request.session["user"] = {"email": token["userinfo"]["email"]}
     request.session["token"] = token["access_token"]
     return RedirectResponse("/")
