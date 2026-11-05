@@ -180,9 +180,10 @@ async def fetch_all(client, url, params, access_token, max_items):
         items += data.get("items", [])
 
         next_page = data.get("nextPageToken")
-        seen_tokens.add(next_page)
         if next_page in seen_tokens:
             break                      # no more pages
+        
+        seen_tokens.add(next_page)
         params["pageToken"] = next_page
 
     return items[:max_items]
