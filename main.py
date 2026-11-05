@@ -165,20 +165,23 @@ async def fetch_all(client, url, params, access_token, max_items):
     items = []
     headers = {"Authorization": f"Bearer {access_token}"}
 
-    while len(items) < max_items:
+    seen_tokens = set()
+    max_pages = (max_items + 49) // 50 # ceiling division, means if items are 201 then we make 5 calls instead of 4
+    for page in range(max_pages):
         r = await client.get(url, params=params, headers=headers)
         if r.status_code == 401:
             raise TokenExpired()  # google token expired
         if r.status_code != 200:
             raise Exception(r.text)   # shows YouTube's error in your terminal
-        if r.status_code == 404 and "channelNOtFound" in r.text:
+        if r.status_code == 404 and "channelNotFound" in r.text:
             return []       # no channel means nothing to fetch, not a failure
 
         data = r.json()
         items += data.get("items", [])
 
         next_page = data.get("nextPageToken")
-        if not next_page:
+        seen_tokens.add(next_page)
+        if next_page in seen_tokens:
             break                      # no more pages
         params["pageToken"] = next_page
 
