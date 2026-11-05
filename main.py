@@ -182,7 +182,7 @@ async def fetch_all(client, url, params, access_token, max_items):
             break                      # no more pages
         params["pageToken"] = next_page
 
-    return items[:max_items]   # list[start:stop:step]
+    return items[:max_items]
 
 async def collect_data(access_token):
     base = "https://www.googleapis.com/youtube/v3"
