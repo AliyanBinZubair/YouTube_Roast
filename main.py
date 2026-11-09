@@ -28,9 +28,11 @@ oauth.register(
 
 
 gemini = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-3-flash-preview"
-MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-2.5-flash", MODEL]
 
+MODELS = []
+for model in gemini.models.list():
+    MODELS.append(model.name)
+    
 DATA_NOTES = """
 WHAT THE DATA IS:
 - liked_video_titles: videos they pressed Like on (many are old, they may have forgotten them)
@@ -120,21 +122,21 @@ class TokenExpired(Exception):
 
 async def ask_gemini(prompt):
     last_error = None
-    for model in MODELS:
+    for model in MODELS[::15]:
         for attempt in range(3):
             try:
-                response = await gemini.aio.models.generate_content(
+                response = await gemini.aio.models.generate_content(  # uses .aio with await so that server wont stop, aio is a async
                     model=model, contents=prompt)
-            except errors.ServerError as e:
+            except errors.ServerError as e:  # google server's problem, we should try again
                 last_error = e
                 await asyncio.sleep(2 ** attempt)   # waits 1, 2, then 4 seconds
                 continue
-            except errors.ClientError as e:
-                if e.code in (404, 429):
-                    print(f"Skipping {model}: {e.code}")   
+            except errors.ClientError as e:  # request has a problem , we shouldn't try again
+                if e.code in (404, 429):  # unavailable or out of quota: try the next model
+                    print(f"Skipping {model}: {e.code}\n\n")   
                     last_error = e
-                    break                                  # unavailable or out of quota: try the next model
-                raise                                      # other client errors are real bugs
+                    break                                  
+                raise        # raise the current expection, same as writing raise e
             
             if response.text:
                 print("Answered by", model)
@@ -171,10 +173,10 @@ async def fetch_all(client, url, params, access_token, max_items):
         r = await client.get(url, params=params, headers=headers)
         if r.status_code == 401:
             raise TokenExpired()  # google token expired
-        if r.status_code != 200:
-            raise Exception(r.text)   # shows YouTube's error in your terminal
         if r.status_code == 404 and "channelNotFound" in r.text:
             return []       # no channel means nothing to fetch, not a failure
+        if r.status_code != 200:   # 200 means request was successful
+            raise Exception(f"From fetch all:\n\n{r.text}\n\n")   # shows YouTube's error in your terminal
 
         data = r.json()
         items += data.get("items", [])
@@ -253,7 +255,7 @@ def home(request: Request):
 @app.get("/login")
 async def login(request: Request):
     redirect_uri = f"{BASE_URL}/callback"
-    return await oauth.google.authorize_redirect(request, redirect_uri) # attach state to request and after complition of login , google send the user back to redirect_url
+    return await oauth.google.authorize_redirect(request, redirect_uri, prompt="select_account") # attach state to request and after complition of login , google send the user back to redirect_url
 
 @app.get("/logout")
 def logout(request: Request):
