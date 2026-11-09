@@ -7,7 +7,7 @@ from authlib.integrations.starlette_client import OAuth
 from authlib.integrations.base_client.errors import MismatchingStateError
 from google import genai
 from collections import Counter
-from google.genai import errors
+from google.genai import errors, types
 
 load_dotenv()  # reads your .env file
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
@@ -27,22 +27,17 @@ oauth.register(
 )
 
 
-gemini = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+gemini = genai.Client(api_key=os.getenv("GEMINI_API_KEY"),http_options=types.HttpOptions(timeout=30000),)
 
 MODELS = []
 for model in gemini.models.list():
-    MODELS.append(model.name)
+    if "generateContent" in (model.supported_actions or []) and "flash" in model.name and "image" not in model.name and "tts" not in model.name:
+        MODELS.append(model.name)
     
 DATA_NOTES = """
 WHAT THE DATA IS:
-- liked_video_titles: videos they pressed Like on (many are old, they may have forgotten them)
-- top_channels_in_likes: (channel, how many of their likes came from it)
-- subscriptions: channels they follow
-- playlists: playlists they made, with some saved videos
-- the number_of fields are exact counts
-You do NOT have their watch history. Never say "watched" or claim how often
-or how long they watched anything. Say "you liked", "you subscribed to",
-"you saved". Only use numbers that appear in the data.
+You only have likes, subscriptions and playlists, not watch history.
+Never say "watched". Only use numbers that appear in the data.
 """
 
 ANGLE_FINDER = """
@@ -60,42 +55,19 @@ is only a description of a habit.
 """
 
 ROAST_WRITER = """
-You are a brutally funny roast comedian. The person asked to be destroyed, so
-be savage about their taste and choices.
-
-You are given their data and a list of possible angles. Pick the 4 funniest
-and write one paragraph for each.
-
-Each paragraph has 2 or 3 sentences:
-1. The evidence, with an exact title or number.
-2. A punchline that ADDS something new: an exaggeration, a comparison, or an
-   absurd conclusion. Test it: if the last sentence only repeats the evidence
-   with an insult, rewrite it.
-
-Example of the shape (invented data, do not copy):
-"You liked a video called '10-Minute Abs' and a 3-hour mukbang. One of those
-is a workout plan. The other one is your actual workout plan."
-
-Rules:
-- Never describe their habits. Every sentence is a joke or its setup.
-- Talk directly to "you". Short sentences. Plain everyday words.
-- Explain anything niche in a few words.
-- Maximum 2 titles or names per paragraph.
-- Roast their choices, never who they are. Do not guess about their job,
-  school, money, social life, mood or relationships.
-- No jokes about religion, health, disability, sexuality, appearance, family,
-  race, nationality or politics. Never use phrases like "cry for help",
-  "depressed", "anxious", or anything about self-harm.
-
-Format (markdown):
-## Brain Rot Score: NN/100
-One savage sentence about the score.
-## The Roast
-Four short paragraphs.
-## Verdict
-One brutal sentence.
-
-Under 250 words.
+You are a savage but funny YouTube roaster.
+Roast this person based on their YouTube data.
+Be witty, sarcastic, and a bit mean, but keep it light-hearted.
+Don't just list their videos. Make fun of patterns, weird obsessions, and contradictions.
+Start with a "Brain Rot Score" out of 100.
+End with a "Verdict": one short sentence that sums up their whole YouTube
+personality in a way anyone would understand. It should be a simple comparison
+or exaggeration, not a random phrase.
+Example of the shape: Your YouTube is a gym membership, a library card and
+a 3am doom-scroll in one account.
+Only roast things that are actually in the data. Never invent numbers or facts.
+If a joke needs explaining, don't use it.
+Use simple, everyday words. Under 200 words.
 """
 
 PAGE = """
@@ -122,13 +94,14 @@ class TokenExpired(Exception):
 
 async def ask_gemini(prompt):
     last_error = None
-    for model in MODELS[::15]:
-        for attempt in range(3):
+    for model in MODELS:
+        for attempt in range(2):
             try:
                 response = await gemini.aio.models.generate_content(  # uses .aio with await so that server wont stop, aio is a async
                     model=model, contents=prompt)
             except errors.ServerError as e:  # google server's problem, we should try again
                 last_error = e
+                print(f"{model}: server error {e.code}, retry {attempt + 1}/3")
                 await asyncio.sleep(2 ** attempt)   # waits 1, 2, then 4 seconds
                 continue
             except errors.ClientError as e:  # request has a problem , we shouldn't try again
@@ -233,7 +206,7 @@ def home(request: Request):
     if user:
         email = html.escape(user["email"])
         body = f"""
-        <h1>YouTube Likes Roast</h1>
+        <h1>YouTube Roast</h1>
         <p>Logged in as {email}</p>
         <a class="btn" href="/roast"
            onclick="this.textContent='Roasting you... up to 40 seconds'; this.classList.add('busy');">
@@ -296,9 +269,9 @@ async def data(request: Request):
     data_text = json.dumps(roast_data, ensure_ascii=False)
 
     try:
-        angles = await ask_gemini(ANGLE_FINDER + DATA_NOTES + "\n\nDATA:\n" + data_text)
+        # angles = await ask_gemini(ANGLE_FINDER + DATA_NOTES + "\n\nDATA:\n" + data_text)
         roast_text = await ask_gemini(
-            ROAST_WRITER + DATA_NOTES + "\n\nDATA:\n" + data_text + "\n\nANGLES FOUND:\n" + angles)
+            ROAST_WRITER + DATA_NOTES + "\n\nDATA:\n" + data_text ) # + "\n\nANGLES FOUND:\n" + angles
     except errors.APIError:    # quota errors or gemini traffic errors, quota means limit of APIs 
         return HTMLResponse(PAGE.replace("__BODY__",
             "<h2>The AI is overloaded right now</h2>"
